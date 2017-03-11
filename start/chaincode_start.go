@@ -31,6 +31,7 @@ type SimpleChaincode struct {
 // Main
 // ============================================================================================================================
 func main() {
+	fmt.Printf("Honeywell Test hyperledger")
 	err := shim.Start(new(SimpleChaincode))
 	if err != nil {
 		fmt.Printf("Error starting Simple chaincode: %s", err)
