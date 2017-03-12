@@ -29,7 +29,10 @@ import (
 	//"unsafe"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
+	"github.com/op/go-logging"
 )
+
+var chaincodeLogger = logging.MustGetLogger("main")
 
 // SimpleChaincode example simple Chaincode implementation
 type SimpleChaincode struct {
@@ -64,7 +67,6 @@ type Project struct {
 }
 
 func main() {
-
 	err := shim.Start(new(SimpleChaincode))
 	if err != nil {
 		fmt.Printf("Error starting Simple chaincode: %s", err)
@@ -78,8 +80,8 @@ func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface, function string
 
 // Invoke isur entry point to invoke a chaincode function
 func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
-	fmt.Println("invoke is running " + function)
-
+	fmt.Println("invoke is running %s" + function)
+	chaincodeLogger.Info("invoke is running %s" + function)
 	// Handle different functions
 	switch function {
 	case "init":
