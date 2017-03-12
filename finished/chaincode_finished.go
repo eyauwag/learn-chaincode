@@ -17,9 +17,17 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
+	"strconv"
+
+	//"container/list"
 	"errors"
 	"fmt"
+	//"strconv"
 
+	//"unsafe"
+	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 )
 
@@ -27,7 +35,36 @@ import (
 type SimpleChaincode struct {
 }
 
+type DonatorRecord struct {
+	donator string
+	money   int
+	index   int
+	project string
+	time    timestamp.Timestamp
+}
+
+type Donator struct {
+	donator string
+	time    timestamp.Timestamp
+	money   int
+	count   int
+	record  []DonatorRecord
+}
+
+type Receiver struct {
+	ProfiteReceiver string
+	time            timestamp.Timestamp
+	money           int
+	project         string
+}
+
+type Project struct {
+	Project string
+	time    timestamp.Timestamp
+}
+
 func main() {
+
 	err := shim.Start(new(SimpleChaincode))
 	if err != nil {
 		fmt.Printf("Error starting Simple chaincode: %s", err)
@@ -36,15 +73,6 @@ func main() {
 
 // Init resets all the things
 func (t *SimpleChaincode) Init(stub shim.ChaincodeStubInterface, function string, args []string) ([]byte, error) {
-	if len(args) != 1 {
-		return nil, errors.New("Incorrect number of arguments. Expecting 1")
-	}
-
-	err := stub.PutState("hello_world", []byte(args[0]))
-	if err != nil {
-		return nil, err
-	}
-
 	return nil, nil
 }
 
@@ -53,11 +81,19 @@ func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface, function stri
 	fmt.Println("invoke is running " + function)
 
 	// Handle different functions
-	if function == "init" {
+	switch function {
+	case "init":
 		return t.Init(stub, "init", args)
-	} else if function == "write" {
-		return t.write(stub, args)
+	case "registerDonater":
+		return t.registerDonater(stub, args)
+	case "registerProfiteReceiver":
+		return t.registerProfiteReceiver(stub, args)
+	case "donate":
+		return t.donate(stub, args)
+	case "assign":
+		return t.assign(stub, args)
 	}
+
 	fmt.Println("invoke did not find func: " + function)
 
 	return nil, errors.New("Received unknown function invocation: " + function)
@@ -68,46 +104,171 @@ func (t *SimpleChaincode) Query(stub shim.ChaincodeStubInterface, function strin
 	fmt.Println("query is running " + function)
 
 	// Handle different functions
-	if function == "read" { //read a variable
-		return t.read(stub, args)
+	switch function {
+	case "trackproject":
+		return t.trackproject(stub, args)
+	case "trackreceiver":
+		return t.trackreceiver(stub, args)
+	case "trackdonator":
+		return t.trackdonator(stub, args)
 	}
+
 	fmt.Println("query did not find func: " + function)
 
 	return nil, errors.New("Received unknown function query: " + function)
 }
 
-// write - invoke function to write key/value pair
-func (t *SimpleChaincode) write(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
-	var key, value string
+func (t *SimpleChaincode) registerDonater(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+	var donatorname string
 	var err error
-	fmt.Println("running write()")
+	fmt.Println("running registerDonater()")
 
 	if len(args) != 2 {
 		return nil, errors.New("Incorrect number of arguments. Expecting 2. name of the key and value to set")
 	}
+	var newdonator Donator
+	newdonator.donator = args[0]
 
-	key = args[0] //rename for funsies
-	value = args[1]
-	err = stub.PutState(key, []byte(value)) //write the variable into the chaincode state
+	//timestamp.Timestamp* timeStamp;
+	timeStamp, err := stub.GetTxTimestamp()
+	newdonator.time = *timeStamp
+	newdonator.money = 0
+	newdonator.count = 0
+
+	var bin_buf bytes.Buffer
+
+	binary.Write(&bin_buf, binary.BigEndian, newdonator)
+	err = stub.PutState(donatorname, bin_buf.Bytes())
 	if err != nil {
 		return nil, err
 	}
 	return nil, nil
 }
 
-// read - query function to read key/value pair
-func (t *SimpleChaincode) read(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
-	var key, jsonResp string
+func (t *SimpleChaincode) registerProfiteReceiver(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+	var receiverName string
+	var err error
+	fmt.Println("running registerProfiteReceiver()")
+
+	if len(args) != 2 {
+		return nil, errors.New("Incorrect number of arguments. Expecting 2. name of the key and value to set")
+	}
+
+	var newreceiver Receiver
+	newreceiver.ProfiteReceiver = args[0]
+
+	timeStamp, err := stub.GetTxTimestamp()
+	newreceiver.time = *timeStamp
+	newreceiver.money = 0
+
+	var bin_buf bytes.Buffer
+	binary.Write(&bin_buf, binary.BigEndian, newreceiver)
+	err = stub.PutState(receiverName, bin_buf.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (t *SimpleChaincode) donate(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+	var money int
+	var err error
+	fmt.Println("running registerProfiteReceiver()")
+
+	if len(args) != 3 {
+		return nil, errors.New("Incorrect number of arguments. Expecting 3. name of the donator and money and project to set")
+	}
+	var record DonatorRecord
+	record.donator = args[0]
+	record.project = args[1]
+	money, err = strconv.Atoi(args[2])
+	if err != nil {
+		return nil, err
+	}
+	record.money = money
+	timeStamp, err := stub.GetTxTimestamp()
+	record.time = *timeStamp
+	var bin_buf bytes.Buffer
+	binary.Write(&bin_buf, binary.BigEndian, record)
+
+	err = stub.PutState(record.donator, bin_buf.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (t *SimpleChaincode) assign(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+	var err error
+	fmt.Println("running registerProfiteReceiver()")
+
+	if len(args) != 3 {
+		return nil, errors.New("Incorrect number of arguments. Expecting 2. name of the key and value to set")
+	}
+
+	//projectName := args[0]
+	receiverName := args[1]
+	/*money, err := strconv.Atoi(args[2])
+	if err != nil {
+		return nil, err
+	}*/
+	timeStamp, err := stub.GetTxTimestamp()
+	//bs := unsafe.StringBytes(timeStamp.String())
+	err = stub.PutState(receiverName, []byte(timeStamp.String()))
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (t *SimpleChaincode) trackproject(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+	var project, jsonResp string
 	var err error
 
 	if len(args) != 1 {
-		return nil, errors.New("Incorrect number of arguments. Expecting name of the key to query")
+		return nil, errors.New("Incorrect number of arguments. Expecting name of the project to query")
 	}
 
-	key = args[0]
-	valAsbytes, err := stub.GetState(key)
+	project = args[0]
+	valAsbytes, err := stub.GetState(project)
 	if err != nil {
-		jsonResp = "{\"Error\":\"Failed to get state for " + key + "\"}"
+		jsonResp = "{\"Error\":\"Failed to get state for " + project + "\"}"
+		return nil, errors.New(jsonResp)
+	}
+
+	return valAsbytes, nil
+}
+
+func (t *SimpleChaincode) trackreceiver(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+	var receiver, jsonResp string
+	var err error
+
+	if len(args) != 1 {
+		return nil, errors.New("Incorrect number of arguments. Expecting name of the receiver to query")
+	}
+
+	//key = args[0]
+	valAsbytes, err := stub.GetState(receiver)
+	if err != nil {
+		jsonResp = "{\"Error\":\"Failed to get state for " + receiver + "\"}"
+		return nil, errors.New(jsonResp)
+	}
+
+	return valAsbytes, nil
+}
+
+func (t *SimpleChaincode) trackdonator(stub shim.ChaincodeStubInterface, args []string) ([]byte, error) {
+	var donatorname, jsonResp string
+	var err error
+
+	if len(args) != 1 {
+		return nil, errors.New("Incorrect number of arguments. Expecting donator name to query")
+	}
+
+	donatorname = args[0]
+	valAsbytes, err := stub.GetState(donatorname)
+	if err != nil {
+		jsonResp = "{\"Error\":\"Failed to get state for " + donatorname + "\"}"
 		return nil, errors.New(jsonResp)
 	}
 
